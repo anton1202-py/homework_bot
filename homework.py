@@ -41,8 +41,6 @@ logger.setLevel(logging.INFO)
 handler_for_log = StreamHandler()
 logger.addHandler(handler_for_log)
 
-Bot = telegram.Bot(token=TELEGRAM_TOKEN)
-
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
@@ -50,8 +48,6 @@ def send_message(bot, message):
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.info(f'Удачная отправка сообщения {message}')
     except Exception as error:
-        message = f'Сбой в работе программы: {error}'
-        bot.send_message(bot, message)
         logging.error(f'Сбой при отрпавке сообщения {message}: {error}')
 
 
@@ -63,8 +59,6 @@ def get_api_answer(current_timestamp):
     response = response_1.json()
     if response_1.status_code != 200:
         logging.error('Ошибка при запросе к основному API')
-        message = 'Ошибка при запросе к основному API'
-        send_message(Bot, message)
         raise Exception
     return response
 
@@ -72,21 +66,18 @@ def get_api_answer(current_timestamp):
 def check_response(response):
     """Проверяет ответ API на корректность."""
     if not isinstance(response, dict):
-        message = ('Передается тип данных не словарь.')
-        send_message(Bot, message)
+        logging.error('Передается тип данных не словарь.')
         raise TypeError
     if not isinstance(response.get('homeworks'), list):
-        message = (
+        logging.error(
             'Из словаря получаем не верный тип данных по ключу homeworks')
-        send_message(Bot, message)
         raise TypeError
     if 'current_date' not in response.keys():
-        message = 'В сроваре не хватает ключа current_date.'
-        send_message(Bot, message)
-        raise TypeError
+        logging.error('В сроваре не хватает ключа current_date.')
+        raise Exception
     if 'homeworks' not in response.keys():
-        message = 'В сроваре не хватает ключа homeworks.'
-        raise TypeError
+        logging.error('В сроваре не хватает ключа homeworks.')
+        raise Exception
     return response.get('homeworks')
 
 
@@ -99,8 +90,6 @@ def parse_status(homework):
         logging.error(
             'Ошибка статуса домашней работы, обнаруженный в ответ API'
         )
-        message = 'Ошибка статуса домашней работы, обнаруженный в ответ API'
-        send_message(Bot, message)
         raise ValueError
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
