@@ -1,10 +1,10 @@
+from http import HTTPStatus
 import logging
 from logging import StreamHandler
 import os
 import time
 
 from dotenv import load_dotenv
-from http import HTTPStatus
 import requests
 import telegram
 from telegram.error import TelegramError
@@ -58,7 +58,13 @@ def get_api_answer(current_timestamp):
     try:
         response_1 = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.exceptions.HTTPError as error:
-        logging.error("Http Error:", error)
+        logger.error("Http Error:", error)
+    except requests.exceptions.ConnectionError as error:
+        logger.error("Ошибка соединения:", error)
+    except requests.exceptions.Timeout as error:
+        logger.error("Ошибка времени запроса:", error)
+    except requests.exceptions.RequestException as error:
+        logger.error("Общая ошибка запроса", error)
     try:
         response = response_1.json()
     except ValueError:
@@ -71,20 +77,23 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
+    DICT_ERROR = 'Передается тип данных не словарь.'
+    DICT_ERROR_HOMEWORKS = (
+        'Из словаря получаем не верный тип данных по ключу homeworks.')
+    KEY_ERROR_DATE = 'В словаре не хватает ключа current_date.'
+    KEY_ERROR_HOMEWORKS = 'В сроваре не хватает ключа homeworks.'
     if not isinstance(response, dict):
-        logger.error('Передается тип данных не словарь.')
-        raise TypeError('Передается тип данных не словарь.')
+        logger.error(DICT_ERROR)
+        raise TypeError(DICT_ERROR)
     if not isinstance(response.get('homeworks'), list):
-        logger.error(
-            'Из словаря получаем не верный тип данных по ключу homeworks')
-        raise TypeError(
-            'Из словаря получаем не верный тип данных по ключу homeworks')
+        logger.error(DICT_ERROR_HOMEWORKS)
+        raise TypeError(DICT_ERROR_HOMEWORKS)
     if 'current_date' not in response:
-        logger.error('В сроваре не хватает ключа current_date.')
-        raise Exception('В сроваре не хватает ключа current_date.')
+        logger.error(KEY_ERROR_DATE)
+        raise Exception(KEY_ERROR_DATE)
     if 'homeworks' not in response:
-        logger.error('В сроваре не хватает ключа homeworks.')
-        raise Exception('В сроваре не хватает ключа homeworks.')
+        logger.error(KEY_ERROR_HOMEWORKS)
+        raise Exception(KEY_ERROR_HOMEWORKS)
     return response.get('homeworks')
 
 
@@ -126,7 +135,7 @@ def main():
     check_tokens()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    # current_timestamp = 1645571239
+    current_timestamp = 1645571239
     while True:
         try:
             response = get_api_answer(current_timestamp)
