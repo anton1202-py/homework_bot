@@ -1,12 +1,13 @@
 import logging
+from logging import StreamHandler
 import os
-import requests
-import telegram
 import time
 
 from dotenv import load_dotenv
-
-from logging import StreamHandler
+from http import HTTPStatus
+import requests
+import telegram
+from telegram.error import TelegramError
 
 
 load_dotenv()
@@ -33,11 +34,8 @@ logging.basicConfig(
     level=logging.DEBUG,
     handlers=[handler],
     format='%(asctime)s, %(levelname)s, %(funcName)s, %(message)s, %(name)s')
-# А тут установлены настройки логгера для текущего файла
 logger = logging.getLogger(__name__)
-# Устанавливаем уровень, с которого логи будут сохраняться в файл
-logger.setLevel(logging.INFO)
-# Указываем обработчик логов
+logger.setLevel(logging.DEBUG)
 handler_for_log = StreamHandler()
 logger.addHandler(handler_for_log)
 
@@ -46,51 +44,67 @@ def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logging.info(f'Удачная отправка сообщения {message}')
+        logger.info(f'Удачная отправка сообщения {message}')
+    except TelegramError:
+        logger.critical('не верный chat_id. Введите chat_id')
     except Exception as error:
-        logging.error(f'Сбой при отрпавке сообщения {message}: {error}')
+        logger.error(f'Сбой при отрпавке сообщения {message}: {error}')
 
 
 def get_api_answer(current_timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response_1 = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    response = response_1.json()
-    if response_1.status_code != 200:
-        logging.error('Ошибка при запросе к основному API')
-        raise Exception
+    try:
+        response_1 = requests.get(ENDPOINT, headers=HEADERS, params=params)
+    except requests.exceptions.HTTPError as error:
+        logging.error("Http Error:", error)
+    try:
+        response = response_1.json()
+    except ValueError:
+        logger.error('response не преобразовался в формат json')
+    if response_1.status_code != HTTPStatus.OK:
+        logger.error('Ошибка при запросе к основному API')
+        raise Exception('Ошибка при запросе к основному API')
     return response
 
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
     if not isinstance(response, dict):
-        logging.error('Передается тип данных не словарь.')
-        raise TypeError
+        logger.error('Передается тип данных не словарь.')
+        raise TypeError('Передается тип данных не словарь.')
     if not isinstance(response.get('homeworks'), list):
-        logging.error(
+        logger.error(
             'Из словаря получаем не верный тип данных по ключу homeworks')
-        raise TypeError
-    if 'current_date' not in response.keys():
-        logging.error('В сроваре не хватает ключа current_date.')
-        raise Exception
-    if 'homeworks' not in response.keys():
-        logging.error('В сроваре не хватает ключа homeworks.')
-        raise Exception
+        raise TypeError(
+            'Из словаря получаем не верный тип данных по ключу homeworks')
+    if 'current_date' not in response:
+        logger.error('В сроваре не хватает ключа current_date.')
+        raise Exception('В сроваре не хватает ключа current_date.')
+    if 'homeworks' not in response:
+        logger.error('В сроваре не хватает ключа homeworks.')
+        raise Exception('В сроваре не хватает ключа homeworks.')
     return response.get('homeworks')
 
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
+    if 'homework_name' not in homework:
+        logger.error('В сроваре не хватает ключа homework_name.')
     homework_name = homework['homework_name']
-    homework_status = homework['status']
+    try:
+        homework_status = homework['status']
+    except KeyError:
+        logger.error('В словаре homework нет ключа status')
     verdict = HOMEWORK_STATUSES.get(homework_status)
     if not verdict:
-        logging.error(
+        logger.error(
             'Ошибка статуса домашней работы, обнаруженный в ответ API'
         )
-        raise ValueError
+        raise ValueError(
+            'Ошибка статуса домашней работы, обнаруженный в ответ API'
+        )
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -99,7 +113,7 @@ def check_tokens():
     vars_env = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
     for token in vars_env:
         if token is None:
-            logging.critical(
+            logger.critical(
                 f'Отсутcтвует обязательная переменная окружения {token}'
                 'Программа принудительно завершена'
             )
@@ -109,6 +123,7 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
+    check_tokens()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     # current_timestamp = 1645571239
@@ -121,7 +136,7 @@ def main():
                 send_message(bot, message)
                 current_timestamp = response['current_date']
             else:
-                logging.debug('Новый статус отсутствует')
+                logger.debug('Новый статус отсутствует')
             time.sleep(RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
