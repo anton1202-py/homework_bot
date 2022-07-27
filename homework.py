@@ -53,6 +53,7 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
+    ERROR_API = 'Ошибка при запросе к основному API'
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
@@ -70,8 +71,8 @@ def get_api_answer(current_timestamp):
     except ValueError:
         logger.error('response не преобразовался в формат json')
     if response_1.status_code != HTTPStatus.OK:
-        logger.error('Ошибка при запросе к основному API')
-        raise Exception('Ошибка при запросе к основному API')
+        logger.error(ERROR_API)
+        raise Exception(ERROR_API)
     return response
 
 
