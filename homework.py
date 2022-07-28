@@ -1,4 +1,5 @@
 from http import HTTPStatus
+import json
 import logging
 from logging import StreamHandler
 import os
@@ -21,12 +22,19 @@ RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
-
 HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
+
+ERROR_API = 'Ошибка при запросе к основному API'
+DICT_ERROR = 'Передается тип данных не словарь.'
+DICT_ERROR_HOMEWORKS = (
+    'Из словаря получаем не верный тип данных по ключу homeworks.')
+KEY_ERROR_DATE = 'В словаре не хватает ключа current_date.'
+KEY_ERROR_HOMEWORKS = 'В сроваре не хватает ключа homeworks.'
+
 handler = logging.FileHandler(
     filename='main.log',
     encoding='utf-8')
@@ -47,29 +55,34 @@ def send_message(bot, message):
         logger.info(f'Удачная отправка сообщения {message}')
     except TelegramError:
         logger.critical('не верный chat_id. Введите chat_id')
+        raise
     except Exception as error:
-        logger.error(f'Сбой при отрпавке сообщения {message}: {error}')
+        logger.error(f'Сбой при отправке сообщения {message}: {error}')
+        raise
 
 
 def get_api_answer(current_timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
-    ERROR_API = 'Ошибка при запросе к основному API'
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
         response_1 = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.exceptions.HTTPError as error:
         logger.error("Http Error:", error)
+        raise
     except requests.exceptions.ConnectionError as error:
         logger.error("Ошибка соединения:", error)
+        raise
     except requests.exceptions.Timeout as error:
         logger.error("Ошибка времени запроса:", error)
+        raise
     except requests.exceptions.RequestException as error:
         logger.error("Общая ошибка запроса", error)
     try:
         response = response_1.json()
-    except ValueError:
+    except json.decoder.JSONDecodeError:
         logger.error('response не преобразовался в формат json')
+        raise
     if response_1.status_code != HTTPStatus.OK:
         logger.error(ERROR_API)
         raise Exception(ERROR_API)
@@ -78,11 +91,6 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
-    DICT_ERROR = 'Передается тип данных не словарь.'
-    DICT_ERROR_HOMEWORKS = (
-        'Из словаря получаем не верный тип данных по ключу homeworks.')
-    KEY_ERROR_DATE = 'В словаре не хватает ключа current_date.'
-    KEY_ERROR_HOMEWORKS = 'В сроваре не хватает ключа homeworks.'
     if not isinstance(response, dict):
         logger.error(DICT_ERROR)
         raise TypeError(DICT_ERROR)
